@@ -113,6 +113,19 @@ class CameraFaceDetector:
             raise RuntimeError("Failed to load face detection cascade")
         
         print("Face detection cascade loaded successfully")
+        
+        # Warm-up: Read a few frames to stabilize the camera (especially important for GStreamer)
+        if self.use_hardware_camera:
+            print("Warming up camera (reading initial frames)...")
+            ret = False
+            for i in range(10):  # Read up to 10 frames to stabilize
+                ret, _ = self.cap.read()
+                if ret:
+                    print(f"Camera warmed up successfully (after {i+1} frames)")
+                    break
+                time.sleep(0.1)
+            if not ret:
+                print("Warning: Camera warm-up frames failed, but continuing...")
     
     def detect_face(self, frame):
         """Detect faces in the frame using SSIG-main detection parameters"""
@@ -230,11 +243,22 @@ class CameraFaceDetector:
         print("Press 'q' to quit")
         
         try:
+            consecutive_failures = 0
+            max_consecutive_failures = 10
+            
             while True:
                 ret, frame = self.cap.read()
                 if not ret:
-                    print("Failed to read frame")
-                    break
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        print(f"Failed to read frame {max_consecutive_failures} times consecutively. Stopping.")
+                        break
+                    print(f"Failed to read frame (attempt {consecutive_failures}/{max_consecutive_failures})")
+                    time.sleep(0.5)  # Wait a bit before retrying
+                    continue
+                
+                # Reset failure counter on successful read
+                consecutive_failures = 0
                 
                 # Detect face
                 face_found, faces = self.detect_face(frame)
